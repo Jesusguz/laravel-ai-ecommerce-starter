@@ -4,38 +4,44 @@ namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
 use App\Models\Product;
-use App\Contracts\EmbeddingProviderInterface;
+use App\Contracts\CommerceAIEngineInterface;
+use App\Services\VectorDatabase\PineconeService;
 
 class VectorizeCatalogCommand extends Command
 {
+    // The signature no longer asks for the AI provider. It is injected automatically.
     protected $signature = 'rag:vectorize';
 
-    protected $description = 'Generate embeddings for all products using the configured AI provider';
+    protected $description = 'Generate embeddings using the configured AI engine and persist them to Pinecone Vector DB';
 
-    // We inject the Interface directly into the constructor!
+    /**
+     * Dependency Injection of the AI Engine (Prism) and Vector DB (Pinecone).
+     */
     public function __construct(
-        private EmbeddingProviderInterface $aiProvider
+        private CommerceAIEngineInterface $aiEngine,
+        private PineconeService $pinecone
     ) {
         parent::__construct();
     }
 
     public function handle()
     {
+        // 1. Fetch all products regardless of their origin (Shopify, WooCommerce, CSV)
         $products = Product::all();
 
         if ($products->isEmpty()) {
-            $this->error("No products found in the database. Run 'php artisan rag:ingest' first.");
+            $this->error("No products found in the local database. Execute 'php artisan rag:ingest' first.");
             return Command::FAILURE;
         }
 
-        // Get the active provider name just for the console output
         $activeProvider = strtoupper(config('rag.embedding_provider'));
-        $this->info("Generating embeddings for {$products->count()} products using {$activeProvider}...");
+        $this->info("Generating embeddings via {$activeProvider} (Prism Engine) and persisting to PINECONE...");
 
         $bar = $this->output->createProgressBar($products->count());
         $bar->start();
 
         foreach ($products as $product) {
+            // 2. Format the product data for optimal semantic retrieval
             $textToVectorize = sprintf(
                 "Product: %s. Description: %s. Price: $%s. In Stock: %s",
                 $product->name,
@@ -45,15 +51,23 @@ class VectorizeCatalogCommand extends Command
             );
 
             try {
-                // The command doesn't care if it's Gemini, OpenAI or Claude.
-                // It just trusts the Interface.
-                $vector = $this->aiProvider->generateEmbedding($textToVectorize);
-
-                // TO-DO: Save $vector to Pinecone
+                // 3. Delegate generation to the Hexagonal AI Port (PrismAdapter)
+                $vector = $this->aiEngine->generateEmbedding($textToVectorize);
+                
+                // 4. Upsert vector array and metadata payload to Pinecone index
+                $this->pinecone->upsert(
+                    id: $product->sku,
+                    vector: $vector,
+                    metadata: [
+                        'name' => $product->name,
+                        'price' => (float) $product->price,
+                        'in_stock' => (bool) $product->in_stock
+                    ]
+                );
                 
             } catch (\Exception $e) {
                 $this->newLine();
-                $this->error("Failed to vectorize SKU {$product->sku}: " . $e->getMessage());
+                $this->error("Vectorization failed for SKU {$product->sku}: " . $e->getMessage());
             }
 
             $bar->advance();
@@ -61,7 +75,7 @@ class VectorizeCatalogCommand extends Command
 
         $bar->finish();
         $this->newLine(2);
-        $this->info('Vectorization complete! The AI brain is ready.');
+        $this->info('Vectorization successfully completed. AI brain and vector memory are synchronized.');
 
         return Command::SUCCESS;
     }

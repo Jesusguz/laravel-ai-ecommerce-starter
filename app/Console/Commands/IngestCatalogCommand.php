@@ -4,68 +4,70 @@ namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
 use App\Models\Product;
-use App\Services\AI\OpenAIProvider;
-use App\Services\AI\GeminiProvider;
+use App\Contracts\EcomAdapterInterface;
+use App\Services\EcomAdapters\ShopifyAdapter;
+use App\Services\EcomAdapters\WooCommerceAdapter;
+use App\Services\EcomAdapters\CsvAdapter;
+use App\Services\EcomAdapters\AmazonAdapter;
+use App\Services\EcomAdapters\ErpAdapter;
 
-class VectorizeCatalogCommand extends Command
+class IngestCatalogCommand extends Command
 {
-    // Added an option to choose the AI provider
-    protected $signature = 'rag:vectorize {--ai=gemini : The AI provider (openai or gemini)}';
+    // The signature allows the user to specify the origin platform via CLI
+    protected $signature = 'rag:ingest {--platform=csv : The source platform (shopify, woocommerce, csv, amazon, erp)}';
 
-    protected $description = 'Generate embeddings for all products and prepare them for Vector DB';
+    protected $description = 'Ingest and normalize catalog data from an external E-commerce platform into the local database';
 
     public function handle()
     {
-        $aiChoice = $this->option('ai');
-        $products = Product::all();
+        $platform = strtolower($this->option('platform'));
 
-        if ($products->isEmpty()) {
-            $this->error("No products found in the database. Run 'php artisan rag:ingest' first.");
-            return Command::FAILURE;
-        }
+        $this->info("Initializing ingestion pipeline for platform: " . strtoupper($platform));
 
-        // Resolve the correct AI Provider
-        $aiProvider = match($aiChoice) {
-            'openai' => new OpenAIProvider(),
-            'gemini' => new GeminiProvider(),
+        // Runtime resolution of the requested E-commerce Adapter
+        $adapter = match($platform) {
+            'shopify' => new ShopifyAdapter(),
+            'woocommerce' => new WooCommerceAdapter(),
+            'csv' => new CsvAdapter(),
+            'amazon' => new AmazonAdapter(),
+            'erp' => new ErpAdapter(),
             default => null,
         };
 
-        if (!$aiProvider) {
-            $this->error("Unsupported AI provider. Use --ai=openai or --ai=gemini");
+        if (!$adapter instanceof EcomAdapterInterface) {
+            $this->error("Unsupported platform or invalid adapter implementation.");
+            $this->line("Available options: --platform=shopify | woocommerce | csv | amazon | erp");
             return Command::FAILURE;
         }
 
-        $this->info("Generating embeddings for {$products->count()} products using " . strtoupper($aiChoice) . "...");
+        $this->info("Fetching products from origin...");
+        
+        // The adapter executes the API calls and returns a standardized array
+        $products = $adapter->fetchProducts();
 
-        $bar = $this->output->createProgressBar($products->count());
+        if (empty($products)) {
+            $this->warn("No products retrieved from the source.");
+            return Command::FAILURE;
+        }
+
+        $this->info("Found " . count($products) . " products. Persisting to local normalized database...");
+
+    
+        $bar = $this->output->createProgressBar(count($products));
         $bar->start();
 
-        foreach ($products as $product) {
-            $textToVectorize = sprintf(
-                "Product: %s. Description: %s. Price: $%s. In Stock: %s. Details: %s",
-                $product->name,
-                $product->description,
-                $product->price,
-                $product->in_stock ? 'Yes' : 'No',
-                json_encode($product->metadata)
+        foreach ($products as $productData) {
+        
+            Product::updateOrCreate(
+                ['sku' => $productData['sku']], 
+                $productData
             );
-
-            try {
-                // Here we call the Interface method, regardless of the provider!
-                $vector = $aiProvider->generateEmbedding($textToVectorize);
-                
-            } catch (\Exception $e) {
-                $this->newLine();
-                $this->error("Failed to vectorize SKU {$product->sku}: " . $e->getMessage());
-            }
-
             $bar->advance();
         }
 
         $bar->finish();
         $this->newLine(2);
-        $this->info('Vectorization complete! The AI brain is ready.');
+        $this->info('Catalog successfully ingested and normalized! Ready for vectorization.');
 
         return Command::SUCCESS;
     }

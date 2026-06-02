@@ -38,4 +38,9 @@ return [
     'gemini' => [
         'key' => env('GEMINI_API_KEY'),
     ],
+    
+    'pinecone' => [
+        'key' => env('PINECONE_API_KEY'),
+        'host' => env('PINECONE_HOST'),
+    ],
 ];
