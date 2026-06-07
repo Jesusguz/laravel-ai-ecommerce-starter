@@ -35,28 +35,43 @@ class ChatController extends Controller
         }
     }
 
-    public function stream(SendMessageRequest $request, GenerateRagResponse $action): StreamedResponse
+   public function stream(SendMessageRequest $request, GenerateRagResponse $action): StreamedResponse|JsonResponse
     {
-        return response()->stream(function () use ($request, $action) {
-            $message = $request->validated('message');
+        try {
+            $userMessage = $request->validated('message');
+            $context = $action->buildContext($userMessage);
+            $messages = [['role' => 'user', 'content' => $userMessage]];
 
-            $context = $action->buildContext($message);
-
-            $messages = [['role' => 'user', 'content' => $message]];
             $stream = $action->getAiEngine()->streamChat($messages, $context);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => __('api.chat.process_error'),
+                'debug' => config('app.debug') ? $e->getMessage() : null,
+            ], 500);
+        }
 
-            foreach ($stream as $token) {
-                echo "data: " . json_encode(['token' => $token]) . "\n\n";
-                ob_flush();
+        return response()->stream(function () use ($stream) {
+            try {
+                foreach ($stream as $token) {
+                    echo "data: " . json_encode($token) . "\n\n";
+                    if (ob_get_level() > 0) ob_flush();
+                    flush();
+                }
+                echo "data: [DONE]\n\n";
+                if (ob_get_level() > 0) ob_flush();
+                flush();
+            } catch (\Throwable $e) {
+                echo "data: " . json_encode(['error' => 'Stream error']) . "\n\n";
+                echo "data: [DONE]\n\n";
+                if (ob_get_level() > 0) ob_flush();
                 flush();
             }
-            echo "data: [DONE]\n\n";
-            ob_flush();
-            flush();
         }, 200, [
             'Content-Type' => 'text/event-stream',
             'Cache-Control' => 'no-cache',
             'X-Accel-Buffering' => 'no',
+            'Connection' => 'keep-alive',
         ]);
     }
 }

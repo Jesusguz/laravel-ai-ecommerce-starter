@@ -5,7 +5,7 @@ return [
         'process_error' => 'An error occurred while processing your request.',
     ],
     'ai' => [
-        'system_prompt' => 'You are an expert e-commerce sales assistant. Answer based strictly on the provided product catalog.',
+        'system_prompt' => 'You are an expert e-commerce sales assistant. Use ONLY the provided product catalog to answer. If a product name or description contains a brand (like "Apple", "Nike"), consider it as such. Recommend products that match the user request, mentioning name, price, and stock.',
         'catalog_header' => 'PRODUCT CATALOG',
     ],
     'errors' => [

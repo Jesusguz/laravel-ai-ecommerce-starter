@@ -7,6 +7,9 @@ use Prism\Prism\Facades\Prism;
 use Prism\Prism\ValueObjects\Messages\UserMessage;
 use Prism\Prism\ValueObjects\Messages\AssistantMessage;
 use Generator;
+use Prism\Prism\Exceptions\PrismProviderOverloadedException;
+use Illuminate\Support\Facades\Log;
+use Prism\Prism\Exceptions\PrismRateLimitedException;
 
 class PrismAdapter implements CommerceAIEngineInterface
 {
@@ -48,7 +51,7 @@ class PrismAdapter implements CommerceAIEngineInterface
             $systemPrompt .= json_encode($context, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
             $systemPrompt .= "\n-------------------------------\n";
         }
-
+Log::debug('Full system prompt:', ['prompt' => $systemPrompt]);
         $prismMessages = [];
         foreach ($messages as $msg) {
             if ($msg['role'] === 'user') {
@@ -109,7 +112,7 @@ class PrismAdapter implements CommerceAIEngineInterface
         };
     }
 
-    public function streamChat(array $messages, array $context = []): \Generator
+    public function streamChat(array $messages, array $context = []): Generator
     {
         $model = $this->getModel('chat');
         $provider = $this->resolveProvider($model);
@@ -130,15 +133,37 @@ class PrismAdapter implements CommerceAIEngineInterface
             }
         }
 
-        // Usamos ->asStream() en lugar de ->generate()
-        $stream = Prism::text()
-            ->using($provider, $model)
-            ->withSystemPrompt($systemPrompt)
-            ->withMessages($prismMessages)
-            ->asStream();
+        return $this->retryOnOverload(function () use ($provider, $model, $systemPrompt, $prismMessages) {
+            $stream = Prism::text()
+                ->using($provider, $model)
+                ->withSystemPrompt($systemPrompt)
+                ->withMessages($prismMessages)
+                ->asStream();
 
-        foreach ($stream as $token) {
-            yield $token;
+            foreach ($stream as $token) {
+                yield $token;
+            }
+        });
+    }
+
+
+   
+    private function retryOnOverload(callable $operation): Generator
+    {
+        $maxAttempts = 3;
+        $attempt = 0;
+
+        while ($attempt < $maxAttempts) {
+            try {
+                yield from $operation();
+                return;
+            } catch (PrismProviderOverloadedException | PrismRateLimitedException $e) {
+            $attempt++;
+            if ($attempt >= $maxAttempts) {
+                throw $e;
+            }
+            usleep(2000000 * (2 ** ($attempt - 1)));
+        }
         }
     }
 }

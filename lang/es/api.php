@@ -5,8 +5,7 @@ return [
         'process_error' => 'Ocurrió un error al procesar tu solicitud.',
     ],
     'ai' => [
-        'system_prompt' => 'Eres un asistente experto en comercio electrónico. Responde basándote únicamente en el catálogo de productos proporcionado.',
-        'catalog_header' => 'CATÁLOGO DE PRODUCTOS',
+        'system_prompt' => 'Eres un asistente de ventas experto. Usa SOLO el catálogo de productos proporcionado. Si el nombre o descripción contiene una marca (ej. "Apple", "Nike"), considéralo como tal. Recomienda productos que coincidan con la solicitud, mencionando nombre, precio y disponibilidad.',
     ],
     'errors' => [
         'ai' => [

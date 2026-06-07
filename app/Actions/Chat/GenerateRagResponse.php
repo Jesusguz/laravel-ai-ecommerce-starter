@@ -23,7 +23,7 @@ class GenerateRagResponse
         $messages = [
             ['role' => 'user', 'content' => $userMessage]
         ];
-
+Log::debug('Context sent to AI:', $context);
         return $this->aiEngine->chat($messages, $context);
     }
 
@@ -31,14 +31,14 @@ class GenerateRagResponse
      * Generates embeddings and retrieves the context from the vector database.
      * Reusable for both standard chat and streaming responses.
      */
-    public function buildContext(string $userMessage): array
+   public function buildContext(string $userMessage): array
     {
         $vector = $this->aiEngine->generateEmbedding($userMessage);
-        
-        $response = $this->pinecone->query($vector, 3);
-        Log::debug('Pinecone Response:', $response);
+        $matches = $this->pinecone->query($vector, 3);
 
-        return $this->extractValidContext($response['matches'] ?? []);
+        Log::debug('Pinecone Matches:', $matches);
+
+        return $this->extractValidContext($matches);
     }
 
     /**
@@ -47,9 +47,9 @@ class GenerateRagResponse
     private function extractValidContext(array $matches): array
     {
         $context = [];
-        
+
         foreach ($matches as $match) {
-            if (isset($match['score']) && $match['score'] >= 0.50 && !empty($match['metadata'])) {
+            if (!empty($match['metadata'])) {
                 $context[] = $match['metadata'];
             }
         }

@@ -56,14 +56,15 @@ class VectorizeCatalogCommand extends Command
                 
                 // 4. Upsert vector array and metadata payload to Pinecone index
                 $this->pinecone->upsert(
-                    id: $product->sku,
-                    vector: $vector,
-                    metadata: [
-                        'name' => $product->name,
-                        'price' => (float) $product->price,
-                        'in_stock' => (bool) $product->in_stock
-                    ]
-                );
+                id: $product->sku,
+                vector: $vector,
+                metadata: [
+                    'name'        => $product->name,
+                    'description' => $product->description,
+                    'price'       => (float) $product->price,
+                    'in_stock'    => (bool) $product->in_stock,
+                ]
+            );
                 
             } catch (\Exception $e) {
                 $this->newLine();
