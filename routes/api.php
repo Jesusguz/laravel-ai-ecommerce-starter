@@ -5,4 +5,5 @@ use App\Http\Controllers\Api\V1\ChatController;
 
 Route::prefix('v1')->group(function () {
     Route::post('/chat', ChatController::class);
+    Route::post('/chat/stream', [ChatController::class, 'stream']);
 });

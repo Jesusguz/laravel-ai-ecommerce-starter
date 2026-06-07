@@ -20,4 +20,6 @@ interface CommerceAIEngineInterface
      * @return string The LLM generated response.
      */
     public function chat(array $messages, array $context = []): string;
+
+    public function streamChat(array $messages, array $context = []): \Generator;
 }

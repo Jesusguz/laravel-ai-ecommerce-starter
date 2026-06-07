@@ -6,6 +6,7 @@ use App\Contracts\CommerceAIEngineInterface;
 use Prism\Prism\Facades\Prism;
 use Prism\Prism\ValueObjects\Messages\UserMessage;
 use Prism\Prism\ValueObjects\Messages\AssistantMessage;
+use Generator;
 
 class PrismAdapter implements CommerceAIEngineInterface
 {
@@ -106,5 +107,38 @@ class PrismAdapter implements CommerceAIEngineInterface
             str_starts_with($model, 'nomic')    => 'ollama',
             default                             => 'openai',
         };
+    }
+
+    public function streamChat(array $messages, array $context = []): \Generator
+    {
+        $model = $this->getModel('chat');
+        $provider = $this->resolveProvider($model);
+
+        $systemPrompt = __('api.ai.system_prompt');
+        if (!empty($context)) {
+            $systemPrompt .= "\n--- " . __('api.ai.catalog_header') . " ---\n";
+            $systemPrompt .= json_encode($context, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+            $systemPrompt .= "\n-------------------------------\n";
+        }
+
+        $prismMessages = [];
+        foreach ($messages as $msg) {
+            if ($msg['role'] === 'user') {
+                $prismMessages[] = new UserMessage($msg['content']);
+            } elseif ($msg['role'] === 'assistant') {
+                $prismMessages[] = new AssistantMessage($msg['content']);
+            }
+        }
+
+        // Usamos ->asStream() en lugar de ->generate()
+        $stream = Prism::text()
+            ->using($provider, $model)
+            ->withSystemPrompt($systemPrompt)
+            ->withMessages($prismMessages)
+            ->asStream();
+
+        foreach ($stream as $token) {
+            yield $token;
+        }
     }
 }
