@@ -1,58 +1,45 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# VendIQ 🧠🛒 - Enterprise RAG AI E-Commerce Starter Kit
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+[![Laravel 13](https://img.shields.io/badge/Laravel-13-FF2D20.svg?style=flat&logo=laravel)](https://laravel.com)
+[![React](https://img.shields.io/badge/React-19-61DAFB.svg?style=flat&logo=react)](https://reactjs.org/)
+[![Pinecone](https://img.shields.io/badge/Vector_DB-Pinecone-000000.svg?style=flat)](#)
+[![Prism](https://img.shields.io/badge/AI_Engine-Prism-5C6BC0.svg?style=flat)](#)
 
-## About Laravel
+VendIQ is a high-performance, Multi-AI semantic search and sales assistant engine designed for modern e-commerce platforms. 
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+Built with a strict **Hexagonal Architecture**, it acts as a plug-and-play RAG (Retrieval-Augmented Generation) system that prevents AI hallucinations by grounding responses strictly in your vector-indexed product catalog.
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## 🚀 Architectural Highlights
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+*   **Multi-AI Adapter Pattern:** Agnostic integration with Gemini, OpenAI, Claude, and Ollama. Switch providers seamlessly via `.env` without altering application logic.
+*   **Matryoshka Representation Learning (MRL) Slicing:** Automatically normalizes high-dimensional embeddings (e.g., truncating 3072 dimensions to 768) to ensure mathematically safe upserts into Pinecone without index corruption.
+*   **Resilient Context Retrieval:** Dynamic fallback mechanisms and exponential backoff handling for API rate limits and provider overloads.
+*   **Server-Sent Events (SSE):** Real-time, token-by-token text streaming via Generator endpoints for a zero-latency UX.
+*   **Premium Multi-Tenant Dashboard:** Built with Laravel Breeze (Inertia.js + React), providing an elegant, internationalized (EN/ES) interface for merchants to sync their Shopify catalogs and manage their configuration.
 
-## Learning Laravel
+## ⚙️ Tech Stack
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+*   **Core:** PHP 8.3+, Laravel 13
+*   **Frontend (Dashboard):** React 19, Inertia.js, Tailwind CSS v4
+*   **Vector Database:** Pinecone (Cosine metric, 768 dimensions)
+*   **LLM Orchestration:** Prism-PHP
 
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+## 📦 Core Workflows
 
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
+1.  **Catalog Ingestion:** `php artisan rag:shopify-sync` pulls live active products from the Shopify Admin API and normalizes them into the local database.
+2.  **Vectorization:** `php artisan rag:vectorize` converts product metadata into 768-dimension embeddings and persists them in Pinecone.
+3.  **Inference (Streaming):** `POST /api/v1/chat/stream` processes user queries, retrieves the top semantic matches from Pinecone, and streams the AI-generated sales response.
 
-## Agentic Development
+## 🛡️ The Hexagonal Approach
 
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+VendIQ isolates the Domain logic from external dependencies. The `CommerceAIEngineInterface` ensures that whether you use Gemini 1.5 Flash or GPT-4o-mini, the application's action layer (`ProcessRagChat`) remains untouched.
 
-```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
-```
-
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
-
-## Contributing
-
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
-
-## Code of Conduct
-
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
-
-## Security Vulnerabilities
-
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
-
-## License
-
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+```php
+// Decoupled AI streaming execution
+public function handleStream(string $userMessage): Generator
+{
+    return $this->aiEngine->streamChat(
+        $this->formatMessages($userMessage),
+        $this->buildContext($userMessage)
+    );
+}
